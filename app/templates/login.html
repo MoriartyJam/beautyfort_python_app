@@ -11,13 +11,23 @@
       <label>Admin password<input type="password" name="password" required></label>
       <button class="button primary" type="submit">Sign in</button>
     </form>
-  {% elif settings.shopify_client_id and settings.shopify_client_secret and settings.shopify_shop %}
-    <div class="stack">
-      <p>Sign in securely through the Shopify test store.</p>
-      <a class="button primary" href="/install?shop={{ settings.shopify_shop }}">Continue with Shopify</a>
-    </div>
+  {% elif settings.shopify_client_id and settings.shopify_client_secret %}
+    {% if settings.shopify_shop %}
+      <div class="stack">
+        <p>Sign in securely through Shopify.</p>
+        <a class="button primary" href="/install?shop={{ settings.shopify_shop }}">Continue with Shopify</a>
+      </div>
+    {% else %}
+      <form method="get" action="/install" class="stack">
+        <p>Enter the Shopify store domain to install or open the application.</p>
+        <label>Shop domain
+          <input type="text" name="shop" placeholder="store.myshopify.com" required>
+        </label>
+        <button class="button primary" type="submit">Continue with Shopify</button>
+      </form>
+    {% endif %}
   {% else %}
-    <div class="alert">Complete the setup by adding <code>SHOPIFY_CLIENT_ID</code>, <code>SHOPIFY_CLIENT_SECRET</code>, and <code>SHOPIFY_SHOP</code> to the local <code>.env</code> file, then restart the application.</div>
+    <div class="alert">Complete the setup by adding <code>SHOPIFY_CLIENT_ID</code> and <code>SHOPIFY_CLIENT_SECRET</code>, then restart the application.</div>
   {% endif %}
 </section>
 {% endblock %}
