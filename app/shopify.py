@@ -164,9 +164,6 @@ class ShopifyClient:
             (int(entry["quantity"]) for entry in quantities if entry.get("name") == "available"),
             None,
         )
-        if current_quantity is None:
-            raise ShopifyError(f"Inventory item is not stocked at location {location_id}")
-
         price_mutation = """
         mutation UpdateVariant($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
           productVariantsBulkUpdate(productId: $productId, variants: $variants) {
@@ -181,6 +178,38 @@ class ShopifyClient:
         errors = data["productVariantsBulkUpdate"]["userErrors"]
         if errors:
             raise ShopifyError(str(errors))
+
+        if current_quantity is None:
+            activate_mutation = """
+            mutation ActivateInventory(
+              $inventoryItemId: ID!,
+              $locationId: ID!,
+              $available: Int!,
+              $key: String!
+            ) {
+              inventoryActivate(
+                inventoryItemId: $inventoryItemId,
+                locationId: $locationId,
+                available: $available
+              ) @idempotent(key: $key) {
+                inventoryLevel { id }
+                userErrors { field message }
+              }
+            }
+            """
+            data = await self.graphql(
+                activate_mutation,
+                {
+                    "inventoryItemId": inventory_item_id,
+                    "locationId": location_id,
+                    "available": new_quantity,
+                    "key": f"{idempotency_key}-activate",
+                },
+            )
+            errors = data["inventoryActivate"]["userErrors"]
+            if errors:
+                raise ShopifyError(str(errors))
+            return
 
         inventory_mutation = """
         mutation SetInventory($input: InventorySetQuantitiesInput!, $key: String!) {
