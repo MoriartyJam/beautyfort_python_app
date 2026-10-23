@@ -3,6 +3,7 @@ import csv
 import io
 import logging
 import secrets
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -286,19 +287,15 @@ async def save_settings(request: Request, db: Session = Depends(get_db), config:
                 raise HTTPException(400, f"Invalid values for pricing rule {rule.id}")
     db.commit()
     for rule in db.scalars(select(PricingRule).order_by(PricingRule.min_price)).all():
-        logger.info(
-            "Pricing configuration saved shop=%s rule=%s range=%s-%s enabled=%s "
-            "vat=%s%% margin=%s%% payment_fee=%s%% fixed_fee=%s; applies to future runs",
-            shop,
-            rule.id,
-            rule.min_price,
-            rule.max_price,
-            rule.enabled,
-            rule.vat_percent,
-            rule.margin_percent,
-            rule.payment_fee_percent,
-            rule.payment_fee_fixed,
+        audit_message = (
+            f"PRICING SAVED shop={shop} rule={rule.id} "
+            f"range={rule.min_price}-{rule.max_price} enabled={rule.enabled} "
+            f"VAT={rule.vat_percent}% margin={rule.margin_percent}% "
+            f"payment_fee={rule.payment_fee_percent}% fixed_fee={rule.payment_fee_fixed}; "
+            "applies to future runs"
         )
+        logger.warning(audit_message)
+        print(audit_message, file=sys.stderr, flush=True)
     return RedirectResponse("/settings?saved=1", status_code=303)
 
 
