@@ -27,7 +27,9 @@ from .shopify import ShopifyClient
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-logger = logging.getLogger(__name__)
+# Uvicorn owns the production logging configuration. Using its error logger
+# keeps application audit messages visible in Seenode Runtime Logs.
+logger = logging.getLogger("uvicorn.error")
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
