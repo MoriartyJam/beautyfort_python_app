@@ -73,6 +73,16 @@ def build_item(
             message=calculated.error,
         )
 
+    pricing_rule = next((rule for rule in rules if rule.id == calculated.rule_id), None)
+    pricing_message = None
+    if pricing_rule:
+        pricing_message = (
+            f"Supplier price {supplier.price}; pricing rule #{pricing_rule.id}: "
+            f"VAT {pricing_rule.vat_percent}%, margin {pricing_rule.margin_percent}%, "
+            f"payment fee {pricing_rule.payment_fee_percent}% + {pricing_rule.payment_fee_fixed}; "
+            f"calculated price {calculated.value}"
+        )
+
     if variant.price > 0:
         change = abs(calculated.value - variant.price) / variant.price * Decimal("100")
         if change > max_price_change_percent:
@@ -92,6 +102,7 @@ def build_item(
         new_quantity=supplier.stock_level,
         action="update" if changed else "none",
         result="preview" if changed else "unchanged",
+        message=pricing_message if changed else None,
     )
 
 
@@ -196,6 +207,19 @@ async def apply_preview(db: Session, config: Settings, run_id: int, shop: str, t
     location_id = await client.primary_location_id()
     errors = 0
     for position, item in enumerate(items, start=1):
+        logger.info(
+            "Run %s: updating %s/%s sku=%s title=%r price=%s->%s stock=%s->%s; %s",
+            run.id,
+            position,
+            len(items),
+            item.sku,
+            item.title,
+            item.old_price,
+            item.new_price,
+            item.old_quantity,
+            item.new_quantity,
+            item.message or "no pricing rule details",
+        )
         try:
             await client.update_variant(
                 product_id=item.product_id or "",
@@ -208,10 +232,12 @@ async def apply_preview(db: Session, config: Settings, run_id: int, shop: str, t
                 idempotency_key=f"beautyfort-{run.id}-{item.id}-{uuid4().hex[:8]}",
             )
             item.result = "updated"
+            logger.info("Run %s: updated sku=%s successfully", run.id, item.sku)
         except ShopifyError as exc:
             item.result = "failed"
             item.message = str(exc)[:2000]
             errors += 1
+            logger.error("Run %s: failed sku=%s error=%s", run.id, item.sku, exc)
         db.commit()
         if position == 1 or position % 50 == 0 or position == len(items):
             logger.info(
