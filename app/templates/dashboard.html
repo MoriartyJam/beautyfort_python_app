@@ -7,10 +7,6 @@
   {% if request.query_params.get('busy') %}<div class="alert">An update is already running. Please wait until it finishes.</div>{% endif %}
   <div class="legacy-actions">
     <a class="legacy-button" href="/settings">Configuration</a>
-    <form method="post" action="/sync/preview" onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').textContent='Preparing Preview';">
-      <input type="hidden" name="csrf" value="{{ csrf }}">
-      <button class="legacy-button" type="submit">Preview Changes</button>
-    </form>
     <form method="post" action="/sync/run" onsubmit="if (!confirm('Start updating Beautyfort prices and stock in Shopify?')) return false; this.querySelector('button').disabled=true; this.querySelector('button').textContent='Please Wait';">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <button class="legacy-button" type="submit">Update Products</button>
