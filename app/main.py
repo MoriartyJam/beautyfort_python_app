@@ -35,6 +35,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     config = get_settings()
+    logger.info("Starting application initialization")
     if config.is_production:
         if config.app_secret == "change-me-in-production" or len(config.app_secret) < 32:
             raise RuntimeError("APP_SECRET must be a random value of at least 32 characters")
@@ -48,9 +49,15 @@ async def lifespan(_: FastAPI):
             raise RuntimeError("SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET are required in production")
         if not config.beautyfort_username or not config.beautyfort_secret:
             raise RuntimeError("BEAUTYFORT_USERNAME and BEAUTYFORT_SECRET are required in production")
-    Base.metadata.create_all(engine)
-    with SessionLocal() as db:
-        seed_defaults(db)
+    logger.info("Connecting to the application database")
+    try:
+        Base.metadata.create_all(engine)
+        with SessionLocal() as db:
+            seed_defaults(db)
+    except Exception:
+        logger.exception("Database initialization failed")
+        raise
+    logger.info("Database initialization completed")
     yield
 
 
