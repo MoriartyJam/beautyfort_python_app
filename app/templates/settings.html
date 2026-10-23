@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Configuration · Beautyfort{% endblock %}
+{% block content %}
+<section class="legacy-form card">
+  <h1>Configuration</h1>
+  {% if request.query_params.get('saved') %}<div class="alert success">Data saved successfully!</div>{% endif %}
+  <form method="post" action="/settings" class="stack" id="pricing-form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="selected_rule_id" id="selected_rule_id">
+    <label>Price Range:
+      <select id="price_range" required>
+        <option value="" selected disabled>Please select</option>
+        {% for rule in rules %}<option value="{{ rule.id }}">{{ rule.min_price }} - {{ rule.max_price }}</option>{% endfor %}
+      </select>
+    </label>
+    <div class="form-grid">
+      <label>VAT %:<input type="number" min="0" step="0.001" name="vat" id="vat" required></label>
+      <label>Margin (%):<input type="number" min="0" step="0.001" name="margin" id="margin" required></label>
+      <label>PayPal Fees (%):<input type="number" min="0" step="0.001" name="payment_fee_percent" id="payment_fee_percent" required></label>
+      <label>PayPal Fees (£):<input type="number" min="0" step="0.01" name="payment_fee_fixed" id="payment_fee_fixed" required></label>
+    </div>
+    <div class="legacy-form-actions"><button class="button primary" type="submit">Update</button><a class="button secondary" href="/admin">Go Back</a></div>
+  </form>
+</section>
+<script>
+const pricingRules = {{ rules_json|default('[]')|safe }};
+const select = document.getElementById('price_range');
+select.addEventListener('change', () => {
+  const rule = pricingRules.find(item => String(item.id) === select.value);
+  if (!rule) return;
+  document.getElementById('selected_rule_id').value = rule.id;
+  document.getElementById('vat').value = rule.vat;
+  document.getElementById('margin').value = rule.margin;
+  document.getElementById('payment_fee_percent').value = rule.fee_percent;
+  document.getElementById('payment_fee_fixed').value = rule.fee_fixed;
+});
+</script>
+{% endblock %}

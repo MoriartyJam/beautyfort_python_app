@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Run #{{ run.id }} · Beautyfort Sync{% endblock %}
+{% block content %}
+<div class="hero">
+  <div><p class="eyebrow">Synchronization run</p><h1>Run #{{ run.id }}</h1><span class="badge {{ run.status }}">{{ run.status|replace('_', ' ') }}</span></div>
+  <div class="actions">
+    {% if items %}<a class="button secondary" href="/runs/{{ run.id }}/csv">Download CSV</a>{% endif %}
+    {% if run.status == 'preview_ready' %}<form method="post" action="/sync/{{ run.id }}/apply" onsubmit="return confirm('Apply all approved changes to Shopify?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="button danger" type="submit">Apply to Shopify</button></form>{% endif %}
+  </div>
+</div>
+{% if run.error_message %}<div class="alert danger">{{ run.error_message }}</div>{% endif %}
+<div class="grid four">
+  <div class="card metric"><span>Supplier rows</span><strong>{{ run.supplier_count }}</strong></div>
+  <div class="card metric"><span>Shopify variants</span><strong>{{ run.shopify_count }}</strong></div>
+  <div class="card metric"><span>Matched</span><strong>{{ run.matched_count }}</strong></div>
+  <div class="card metric"><span>Changes</span><strong>{{ run.changed_count }}</strong></div>
+</div>
+<section class="card table-wrap"><table>
+  <thead><tr><th>Product</th><th>SKU</th><th>Beautyfort</th><th>Price</th><th>Stock</th><th>Action</th><th>Result</th><th>Message</th></tr></thead>
+  <tbody>{% for item in items %}<tr>
+    <td>{{ item.title }}</td><td>{{ item.sku }}</td><td>{{ item.supplier_code or '—' }}</td>
+    <td>{{ item.old_price }} → {{ item.new_price if item.new_price is not none else '—' }}</td>
+    <td>{{ item.old_quantity }} → {{ item.new_quantity if item.new_quantity is not none else '—' }}</td>
+    <td>{{ item.action|replace('_', ' ') }}</td><td>{{ item.result }}</td><td>{{ item.message or '' }}</td>
+  </tr>{% else %}<tr><td colspan="8">No item details.</td></tr>{% endfor %}</tbody>
+</table></section>
+{% endblock %}

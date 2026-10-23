@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Server Logs · Beautyfort Sync{% endblock %}
+{% block content %}
+<div class="history-head"><h1>Server Logs</h1><a class="button secondary" href="/admin">Go Back</a></div>
+<section class="card table-wrap">
+  <table>
+    <thead><tr><th>Run</th><th>Started</th><th>Status</th><th>Mode</th><th>Supplier</th><th>Shopify</th><th>Matched</th><th>Changes</th><th>Errors</th><th>Details</th></tr></thead>
+    <tbody>
+      {% for run in runs %}
+      <tr>
+        <td>#{{ run.id }}</td>
+        <td>{{ run.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        <td>{{ run.status|replace('_', ' ') }}</td>
+        <td>{{ run.mode }}</td>
+        <td>{{ run.supplier_count }}</td>
+        <td>{{ run.shopify_count }}</td>
+        <td>{{ run.matched_count }}</td>
+        <td>{{ run.changed_count }}</td>
+        <td>{{ run.error_count }}</td>
+        <td><a href="/runs/{{ run.id }}">Open</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="10">No synchronization runs yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

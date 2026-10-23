@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Previous Updates · Beautyfort{% endblock %}
+{% block content %}
+<div class="history-head"><h1>History Records</h1><a class="button secondary" href="/admin">Go Back</a></div>
+<section class="card table-wrap"><table>
+  <thead><tr><th>Sr.no</th><th>Product SKU</th><th>Product Title</th><th>Last Updated</th></tr></thead>
+  <tbody>{% for row in history %}<tr>
+    <td>{{ loop.index }}</td><td>{{ row.sku }}</td><td>{{ row.title }}</td>
+    <td>{% if row.updated_at %}{{ row.updated_at.strftime('%Y-%m-%d %I:%M %p') }}{% endif %}</td>
+  </tr>{% else %}<tr><td colspan="4">No update records yet.</td></tr>{% endfor %}</tbody>
+</table></section>
+{% endblock %}
