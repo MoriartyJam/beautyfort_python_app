@@ -58,7 +58,7 @@ Create these resources in one Seenode workspace:
 Web service configuration:
 
 - Build command: `pip install -r requirements.txt`
-- Start command: `uvicorn app.main:app --host 0.0.0.0 --port 80`
+- Start command: `python index.py`
 - Port: `80`
 - Health check: `/health`
 

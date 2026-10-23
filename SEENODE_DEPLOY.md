@@ -9,7 +9,7 @@ Create a PostgreSQL Database in the same Seenode workspace. Copy its internal co
 - Type: Web
 - Root directory: repository root
 - Build: `pip install -r requirements.txt`
-- Start: `uvicorn app.main:app --host 0.0.0.0 --port 80`
+- Start: `python index.py`
 - Port: `80`
 - Health check: `/health`
 
