@@ -15,7 +15,11 @@ from .shopify import ShopifyClient
 from .sync_service import apply_preview, create_preview
 
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
@@ -34,6 +38,7 @@ async def process_next(config) -> bool:
         if not run:
             return False
         run_id, shop, action = run.id, run.shop_domain, run.mode
+        logger.info("Claimed synchronization run=%s mode=%s shop=%s", run_id, action, shop)
         try:
             token = await token_for(config, db, shop)
             if action == "apply":
@@ -42,8 +47,10 @@ async def process_next(config) -> bool:
                 preview = await create_preview(db, config, shop, token, run_id=run_id)
                 if action in {"sync", "scheduled"}:
                     await apply_preview(db, config, preview.id, shop, token)
+            logger.info("Finished synchronization run=%s", run_id)
             return True
         except Exception as exc:
+            logger.exception("Synchronization run=%s failed: %s", run_id, exc)
             fail_run(db, run_id, exc)
             return True
 
@@ -67,10 +74,16 @@ def enqueue_scheduled_if_due(config) -> None:
 
 async def run_forever() -> None:
     config = get_settings()
+    logger.info(
+        "Beautyfort worker starting poll_seconds=%s automatic_apply=%s",
+        config.worker_poll_seconds,
+        config.automatic_apply,
+    )
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
         seed_defaults(db)
-        recover_interrupted(db)
+        recovered = recover_interrupted(db)
+    logger.info("Beautyfort worker ready recovered_runs=%s", recovered)
     while True:
         enqueue_scheduled_if_due(config)
         processed = await process_next(config)

@@ -116,6 +116,7 @@ async def create_preview(
             raise RuntimeError("Queued synchronization was not found or was not claimed")
 
     try:
+        logger.info("Run %s: loading synchronization settings", run.id)
         values = get_app_settings(db)
         prefix = values.get("sku_prefix", "BR")
         minimum_stock = int(values.get("minimum_supplier_stock", "5"))
@@ -123,9 +124,13 @@ async def create_preview(
         max_change = Decimal(values.get("max_price_change_percent", "40"))
         rules = list(db.scalars(select(PricingRule).order_by(PricingRule.min_price)).all())
 
+        logger.info("Run %s: downloading Beautyfort stock", run.id)
         supplier_rows = await BeautyfortClient(config).fetch_stock()
+        logger.info("Run %s: received %s Beautyfort rows", run.id, len(supplier_rows))
         shopify = ShopifyClient(config, shop, token)
+        logger.info("Run %s: downloading Shopify variants with SKU prefix %s", run.id, prefix)
         variants = await shopify.fetch_variants(prefix)
+        logger.info("Run %s: received %s Shopify variants", run.id, len(variants))
         supplier_map = {row.stock_code.strip().upper(): row for row in supplier_rows}
 
         for variant in variants:
@@ -143,6 +148,13 @@ async def create_preview(
         run.completed_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(run)
+        logger.info(
+            "Run %s: preview ready matched=%s changes=%s skipped=%s",
+            run.id,
+            run.matched_count,
+            run.changed_count,
+            run.skipped_count,
+        )
         return run
     except Exception as exc:
         db.rollback()
@@ -179,10 +191,11 @@ async def apply_preview(db: Session, config: Settings, run_id: int, shop: str, t
     run.status = "running"
     run.completed_at = None
     db.commit()
+    logger.info("Run %s: applying %s product changes", run.id, len(items))
     client = ShopifyClient(config, shop, token)
     location_id = await client.primary_location_id()
     errors = 0
-    for item in items:
+    for position, item in enumerate(items, start=1):
         try:
             await client.update_variant(
                 product_id=item.product_id or "",
@@ -200,10 +213,26 @@ async def apply_preview(db: Session, config: Settings, run_id: int, shop: str, t
             item.message = str(exc)[:2000]
             errors += 1
         db.commit()
+        if position == 1 or position % 50 == 0 or position == len(items):
+            logger.info(
+                "Run %s: progress %s/%s updated=%s errors=%s",
+                run.id,
+                position,
+                len(items),
+                position - errors,
+                errors,
+            )
 
     run.error_count = errors
     run.status = "completed_with_errors" if errors else "completed"
     run.completed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(run)
+    logger.info(
+        "Run %s: apply completed status=%s updated=%s errors=%s",
+        run.id,
+        run.status,
+        len(items) - errors,
+        errors,
+    )
     return run
