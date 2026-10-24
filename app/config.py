@@ -56,6 +56,10 @@ class Settings(BaseSettings):
         return f"{self.app_url.rstrip('/')}/auth/callback"
 
     @property
+    def app_uninstalled_webhook_uri(self) -> str:
+        return f"{self.app_url.rstrip('/')}/webhooks/app/uninstalled"
+
+    @property
     def is_production(self) -> bool:
         return self.app_environment.strip().lower() == "production"
 

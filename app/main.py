@@ -23,7 +23,15 @@ from .database import Base, SessionLocal, engine, get_db
 from .defaults import get_app_settings, seed_defaults
 from .models import AppSetting, PricingRule, ShopConnection, SyncItem, SyncRun
 from .jobs import enqueue, enqueue_apply
-from .security import decrypt_token, encrypt_token, sign_value, unsign_value, valid_shop_domain, verify_shopify_hmac
+from .security import (
+    decrypt_token,
+    encrypt_token,
+    sign_value,
+    unsign_value,
+    valid_shop_domain,
+    verify_shopify_hmac,
+    verify_shopify_webhook_hmac,
+)
 from .shopify import ShopifyClient
 
 
@@ -57,9 +65,24 @@ async def lifespan(_: FastAPI):
         Base.metadata.create_all(engine)
         with SessionLocal() as db:
             seed_defaults(db)
+            connections = list(db.scalars(select(ShopConnection)).all())
     except Exception:
         logger.exception("Database initialization failed")
         raise
+    for connection in connections:
+        try:
+            token = decrypt_token(config, connection.encrypted_access_token)
+            await ShopifyClient(config, connection.shop_domain, token).ensure_app_uninstalled_webhook(
+                config.app_uninstalled_webhook_uri
+            )
+            logger.info("Verified app/uninstalled webhook for shop=%s", connection.shop_domain)
+        except Exception:
+            # Keep the admin available if Shopify is temporarily unreachable;
+            # OAuth will retry registration on the next installation.
+            logger.exception(
+                "Unable to verify app/uninstalled webhook for shop=%s",
+                connection.shop_domain,
+            )
     logger.info("Database initialization completed")
     yield
 
@@ -190,6 +213,8 @@ async def oauth_callback(request: Request, db: Session = Depends(get_db), settin
     token = response.json().get("access_token")
     if not token:
         raise HTTPException(400, "Shopify did not return an access token")
+    shopify = ShopifyClient(settings, shop, token)
+    await shopify.ensure_app_uninstalled_webhook(settings.app_uninstalled_webhook_uri)
     connection = connection_for(db, shop) or ShopConnection(shop_domain=shop, encrypted_access_token="")
     connection.encrypted_access_token = encrypt_token(settings, token)
     db.add(connection)
@@ -200,6 +225,51 @@ async def oauth_callback(request: Request, db: Session = Depends(get_db), settin
         samesite="none", max_age=60 * 60 * 24 * 30,
     )
     return redirect
+
+
+@app.post("/webhooks/app/uninstalled", status_code=200)
+async def app_uninstalled(
+    request: Request,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    body = await request.body()
+    received_hmac = request.headers.get("X-Shopify-Hmac-Sha256", "")
+    if not verify_shopify_webhook_hmac(body, received_hmac, settings.shopify_client_secret):
+        raise HTTPException(status_code=401, detail="Invalid Shopify webhook HMAC")
+
+    shop = request.headers.get("X-Shopify-Shop-Domain", "").strip().lower()
+    topic = request.headers.get("X-Shopify-Topic", "").strip().lower()
+    if topic != "app/uninstalled" or not valid_shop_domain(shop):
+        raise HTTPException(status_code=400, detail="Invalid Shopify webhook metadata")
+
+    connection = connection_for(db, shop)
+    if connection:
+        db.delete(connection)
+
+    active_runs = list(
+        db.scalars(
+            select(SyncRun).where(
+                SyncRun.shop_domain == shop,
+                SyncRun.status.in_(("queued", "running")),
+            )
+        ).all()
+    )
+    now = datetime.now(timezone.utc)
+    for run in active_runs:
+        run.status = "failed"
+        run.completed_at = now
+        run.error_count += 1
+        run.error_message = "Shopify application was uninstalled; synchronization was cancelled."
+    db.commit()
+    logger.warning(
+        "APP UNINSTALLED shop=%s token_removed=%s cancelled_runs=%s webhook_id=%s",
+        shop,
+        connection is not None,
+        len(active_runs),
+        request.headers.get("X-Shopify-Webhook-Id", "unknown"),
+    )
+    return {"status": "ok"}
 
 
 @app.post("/logout")

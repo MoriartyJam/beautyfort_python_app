@@ -24,6 +24,15 @@ def verify_shopify_hmac(params: dict[str, str], secret: str) -> bool:
     return bool(received) and hmac.compare_digest(received, expected)
 
 
+def verify_shopify_webhook_hmac(body: bytes, received: str, secret: str) -> bool:
+    """Verify Shopify's base64 HMAC signature for a raw webhook body."""
+    if not received or not secret:
+        return False
+    digest = hmac.new(secret.encode(), body, hashlib.sha256).digest()
+    expected = base64.b64encode(digest).decode()
+    return hmac.compare_digest(received, expected)
+
+
 def serializer(settings: Settings) -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(settings.app_secret, salt="beautyfort-sync")
 

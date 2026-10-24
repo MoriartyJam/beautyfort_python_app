@@ -122,6 +122,39 @@ class ShopifyClient:
                 return variants
             cursor = connection["pageInfo"]["endCursor"]
 
+    async def ensure_app_uninstalled_webhook(self, callback_url: str) -> None:
+        """Create the shop-specific uninstall subscription once per callback URL."""
+        query = """
+        query AppUninstalledWebhooks($first: Int!) {
+          webhookSubscriptions(first: $first, topics: [APP_UNINSTALLED]) {
+            nodes { id uri topic }
+          }
+        }
+        """
+        data = await self.graphql(query, {"first": 100})
+        subscriptions = data.get("webhookSubscriptions", {}).get("nodes", [])
+        if any(subscription.get("uri") == callback_url for subscription in subscriptions):
+            return
+
+        mutation = """
+        mutation CreateAppUninstalledWebhook($webhookSubscription: WebhookSubscriptionInput!) {
+          webhookSubscriptionCreate(
+            topic: APP_UNINSTALLED,
+            webhookSubscription: $webhookSubscription
+          ) {
+            webhookSubscription { id uri topic }
+            userErrors { field message }
+          }
+        }
+        """
+        data = await self.graphql(
+            mutation,
+            {"webhookSubscription": {"uri": callback_url}},
+        )
+        errors = data["webhookSubscriptionCreate"]["userErrors"]
+        if errors:
+            raise ShopifyError(f"Unable to register app/uninstalled webhook: {errors}")
+
     async def update_price(self, variant_id: str, price: Decimal) -> None:
         mutation = """
         mutation UpdateVariant($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
