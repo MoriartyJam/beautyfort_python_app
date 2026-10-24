@@ -98,12 +98,12 @@ def connection_for(db: Session, shop: str) -> ShopConnection | None:
 def current_shop(request: Request, db: Session, settings: Settings) -> str | None:
     cookie = request.cookies.get("bf_session", "")
     payload = unsign_value(settings, cookie, max_age=60 * 60 * 24 * 30) if cookie else None
-    if payload and payload.get("shop") and (
-        connection_for(db, payload["shop"])
-        or settings.shopify_access_token
-        or (settings.shopify_client_id and settings.shopify_client_secret)
-    ):
-        return payload["shop"]
+    if payload and payload.get("shop"):
+        shop = str(payload["shop"]).strip().lower()
+        if connection_for(db, shop):
+            return shop
+        if settings.shopify_access_token and shop == settings.shopify_shop:
+            return shop
     return None
 
 
@@ -281,6 +281,10 @@ def logout():
 
 @app.get("/admin", response_class=HTMLResponse)
 def admin(request: Request, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
+    if not current_shop(request, db, settings):
+        response = RedirectResponse("/", status_code=303)
+        response.delete_cookie("bf_session")
+        return response
     shop, _ = credentials(request, db, settings)
     latest = db.scalar(select(SyncRun).where(SyncRun.shop_domain == shop).order_by(SyncRun.id.desc()).limit(1))
     app_settings = get_app_settings(db)
